@@ -1,156 +1,111 @@
 :root {
-  /* Palette: initial proposal (cream, cider amber, charcoal, sage, earth). */
-  --paper: #fbf7f0;
-  --cream: #f3ecdf;
-  --cream-deep: #e8dcc7;
-  --charcoal: #1a1815;
-  --charcoal-2: #24211c;
-  --forest: #1f241d;
-  --ink: #26221d;
-  --ink-muted: #5b5247;
-  --amber: #d9973a;
-  --amber-bright: #eab463;
-  --amber-ink: #8a5216;
-  --sage: #8f9d80;
-  --sage-deep: #4d5a43;
-  --clay: #a8573a;
-  --on-dark: #f3ecdf;
-  --on-dark-muted: #c9bead;
-  --line-dark: rgb(243 236 223 / 0.16);
-  --line-light: rgb(38 34 29 / 0.14);
-  /* Form-control boundary: ≥3:1 against both the paper card and the white field. */
-  --line-control: #8c8275;
+  --text: #6b6375;
+  --text-h: #08060d;
+  --bg: #fff;
+  --border: #e5e4e7;
+  --code-bg: #f4f3ec;
+  --accent: #aa3bff;
+  --accent-bg: rgba(170, 59, 255, 0.1);
+  --accent-border: rgba(170, 59, 255, 0.5);
+  --social-bg: rgba(244, 243, 236, 0.5);
+  --shadow:
+    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
-  --font-display: 'Bodoni Moda', 'Didot', 'Bodoni 72', 'Times New Roman', serif;
-  --font-body: 'Archivo', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, Consolas, monospace;
 
-  --gutter: clamp(20px, 5vw, 72px);
-  --max: 1360px;
-  --header-h: 76px;
-  --radius: 3px;
-  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --ease-soft: cubic-bezier(0.45, 0, 0.2, 1);
-
-  color-scheme: light;
-  font-family: var(--font-body);
-  font-size: 100%;
-  line-height: 1.6;
-  color: var(--ink);
-  background: var(--charcoal);
+  font: 18px/145% var(--sans);
+  letter-spacing: 0.18px;
+  color-scheme: light dark;
+  color: var(--text);
+  background: var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
 }
 
-*,
-*::before,
-*::after {
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #9ca3af;
+    --text-h: #f3f4f6;
+    --bg: #16171d;
+    --border: #2e303a;
+    --code-bg: #1f2028;
+    --accent: #c084fc;
+    --accent-bg: rgba(192, 132, 252, 0.15);
+    --accent-border: rgba(192, 132, 252, 0.5);
+    --social-bg: rgba(47, 48, 58, 0.5);
+    --shadow:
+      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+  }
+
+  #social .button-icon {
+    filter: invert(1) brightness(2);
+  }
+}
+
+#root {
+  width: 1126px;
+  max-width: 100%;
+  margin: 0 auto;
+  text-align: center;
+  border-inline: 1px solid var(--border);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-  scroll-padding-top: var(--header-h);
 }
 
 body {
   margin: 0;
-  background: var(--paper);
-}
-
-img,
-svg {
-  display: block;
-  max-width: 100%;
 }
 
 h1,
-h2,
-h3,
-p,
-figure,
-blockquote,
-dl,
-dd,
-ol,
-ul {
+h2 {
+  font-family: var(--heading);
+  font-weight: 500;
+  color: var(--text-h);
+}
+
+h1 {
+  font-size: 56px;
+  letter-spacing: -1.68px;
+  margin: 32px 0;
+  @media (max-width: 1024px) {
+    font-size: 36px;
+    margin: 20px 0;
+  }
+}
+h2 {
+  font-size: 24px;
+  line-height: 118%;
+  letter-spacing: -0.24px;
+  margin: 0 0 8px;
+  @media (max-width: 1024px) {
+    font-size: 20px;
+  }
+}
+p {
   margin: 0;
 }
 
-ol,
-ul {
-  padding: 0;
-  list-style: none;
+code,
+.counter {
+  font-family: var(--mono);
+  display: inline-flex;
+  border-radius: 4px;
+  color: var(--text-h);
 }
 
-a {
-  color: inherit;
-}
-
-button,
-input,
-textarea,
-select {
-  font: inherit;
-  color: inherit;
-}
-
-main:focus {
-  outline: none;
-}
-
-:focus-visible {
-  outline: 2px solid var(--amber-bright);
-  outline-offset: 3px;
-  border-radius: 2px;
-}
-
-::selection {
-  background: var(--amber);
-  color: var(--charcoal);
-}
-
-.visually-hidden {
-  position: absolute !important;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.skip-link {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  z-index: 100;
-  padding: 10px 16px;
-  background: var(--amber);
-  color: var(--charcoal);
-  font-weight: 600;
-  text-decoration: none;
-  transform: translateY(-160%);
-  transition: transform 200ms var(--ease-out);
-}
-
-.skip-link:focus {
-  transform: translateY(0);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    /* Must be 0s: any non-zero duration starts transitions on every element (transition-property defaults to all). */
-    transition-duration: 0s !important;
-  }
+code {
+  font-size: 15px;
+  line-height: 135%;
+  padding: 4px 8px;
+  background: var(--code-bg);
 }
