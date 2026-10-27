@@ -35,7 +35,7 @@ export function VenuePhoto({
 
   return (
     <img
-      className={`photo ${className}`}
+      className={`photo${image.trim === 'top' ? ' photo--trim-top' : ''} ${className}`}
       src={image.src}
       width={image.width}
       height={image.height}

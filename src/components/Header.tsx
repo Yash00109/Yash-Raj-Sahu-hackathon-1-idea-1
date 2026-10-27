@@ -1,16 +1,30 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { Link, NavLink, useLocation } from 'react-router'
 import { logo, venue } from '../content/venue'
 import { languages, type Copy, type Lang } from '../i18n/copy'
+import type { SiteCopy } from '../i18n/site'
+import { pageRoutes, RESERVATION_HREF } from '../routes'
 
 interface HeaderProps {
   t: Copy
+  s: SiteCopy
   lang: Lang
   onLangChange: (lang: Lang) => void
 }
 
-export function Header({ t, lang, onLangChange }: HeaderProps) {
+const navLinkClass = ({ isActive }: { isActive: boolean }) => `site-nav__link${isActive ? ' is-active' : ''}`
+
+export function Header({ t, s, lang, onLangChange }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { pathname } = useLocation()
+  // Remembering the path the menu was opened on closes it automatically after any navigation.
+  const [openedOn, setOpenedOn] = useState<string | null>(null)
+  const menuOpen = openedOn === pathname
+  const setMenuOpen = (open: boolean | ((current: boolean) => boolean)) =>
+    setOpenedOn((current) => {
+      const next = typeof open === 'function' ? open(current === pathname) : open
+      return next ? pathname : null
+    })
   const menuId = useId()
   const toggleRef = useRef<HTMLButtonElement>(null)
   const navRef = useRef<HTMLElement>(null)
@@ -28,7 +42,7 @@ export function Header({ t, lang, onLangChange }: HeaderProps) {
     navRef.current?.querySelector('a')?.focus()
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        setMenuOpen(false)
+        setOpenedOn(null)
         toggleRef.current?.focus()
       }
     }
@@ -36,56 +50,56 @@ export function Header({ t, lang, onLangChange }: HeaderProps) {
     return () => document.removeEventListener('keydown', onKey)
   }, [menuOpen])
 
-  const links = [
-    { href: '#historia', label: t.nav.story },
-    { href: '#experiencias', label: t.nav.experiences },
-    { href: '#visita', label: t.nav.visit },
-  ]
-
   return (
-    <header className={`site-header${scrolled || menuOpen ? ' is-solid' : ''}`}>
+    <header className={`site-header${scrolled || menuOpen || pathname !== '/' ? ' is-solid' : ''}`}>
       <div className="site-header__inner">
-        <a className="brand" href="#inicio" aria-label={venue.name}>
+        <Link className="brand" to="/" aria-label={`${venue.name} · ${s.home}`}>
           <img className="brand__mark" src={logo.light} width={44} height={43} alt="" />
           <span className="brand__text" aria-hidden="true">
             <span className="brand__name">Iturrieta</span>
             <span className="brand__sub">Sagardotegia</span>
           </span>
-        </a>
+        </Link>
 
-        <nav ref={navRef} className={`site-nav${menuOpen ? ' is-open' : ''}`} id={menuId} aria-label={t.nav.menu}>
+        <nav ref={navRef} className={`site-nav${menuOpen ? ' is-open' : ''}`} id={menuId} aria-label={s.primaryNav}>
           <ul className="site-nav__list">
-            {links.map((link) => (
-              <li key={link.href}>
-                <a className="site-nav__link" href={link.href} onClick={() => setMenuOpen(false)}>
-                  {link.label}
-                </a>
+            <li className="site-nav__item--home">
+              <NavLink className={navLinkClass} to="/" end onClick={() => setMenuOpen(false)}>
+                {s.home}
+              </NavLink>
+            </li>
+            {pageRoutes.map((route) => (
+              <li key={route.key}>
+                <NavLink className={navLinkClass} to={route.path} onClick={() => setMenuOpen(false)}>
+                  {s.pages[route.key]}
+                </NavLink>
               </li>
             ))}
           </ul>
         </nav>
 
         <div className="site-header__actions">
-          <div className="lang-switch" role="group" aria-label={t.nav.language}>
-            {languages.map((option) => (
-              <button
-                key={option.code}
-                type="button"
-                className="lang-switch__btn"
-                aria-pressed={option.code === lang}
-                lang={option.code}
-                title={option.name}
-                onClick={() => onLangChange(option.code)}
-              >
-                <span aria-hidden="true">{option.label}</span>
-                <span className="visually-hidden">{option.name}</span>
-              </button>
-            ))}
-          </div>
+          <label className="lang-select">
+            <span className="visually-hidden">{t.nav.language}</span>
+            <select
+              className="lang-select__control"
+              value={lang}
+              onChange={(event) => {
+                const next = languages.find((option) => option.code === event.target.value)
+                if (next) onLangChange(next.code)
+              }}
+            >
+              {languages.map((option) => (
+                <option key={option.code} value={option.code} lang={option.code}>
+                  {option.name}
+                </option>
+              ))}
+            </select>
+          </label>
 
-          <a className="btn btn--primary btn--compact" href="#reservar">
+          <NavLink className="btn btn--primary btn--compact" to={RESERVATION_HREF}>
             {t.nav.reserve}
-          </a>
+          </NavLink>
 
           <button
             ref={toggleRef}

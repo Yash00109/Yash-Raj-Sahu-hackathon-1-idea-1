@@ -18,8 +18,11 @@ export const usePrefersReducedMotion = () => useMediaQuery('(prefers-reduced-mot
 
 export const useFinePointer = () => useMediaQuery('(hover: hover) and (pointer: fine)')
 
-/** Fades `.reveal` elements in as they enter the viewport; content stays visible without JS or with reduced motion. */
-export function useScrollReveal(enabled: boolean) {
+/**
+ * Fades `.reveal` elements in as they enter the viewport; content stays visible without JS or with reduced motion.
+ * Pass the current route as `scope` so elements of a newly rendered page are observed too.
+ */
+export function useScrollReveal(enabled: boolean, scope?: string) {
   useEffect(() => {
     const root = document.documentElement
     if (!enabled || !('IntersectionObserver' in window)) {
@@ -43,5 +46,5 @@ export function useScrollReveal(enabled: boolean) {
     root.classList.add('reveal-ready')
 
     return () => observer.disconnect()
-  }, [enabled])
+  }, [enabled, scope])
 }

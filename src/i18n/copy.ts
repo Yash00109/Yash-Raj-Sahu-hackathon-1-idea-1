@@ -1,14 +1,20 @@
+import { de } from './copy.de'
+import { fr } from './copy.fr'
+
 /**
  * Venue copy is taken from the official site's own language versions
- * (/, /Euskara/, /English/). Interface strings that do not exist on the
+ * (/, /Euskara/, /English/; French lives in copy.fr.ts, German in copy.de.ts). Interface strings that do not exist on the
  * official site (form labels, prototype notices) are drafts; the Basque ones
  * in particular need review by a native speaker before launch.
  */
 
+/** Order and BCP 47 locales of the five supported languages. */
 export const languages = [
-  { code: 'es', label: 'ES', name: 'Español' },
-  { code: 'eu', label: 'EU', name: 'Euskara' },
-  { code: 'en', label: 'EN', name: 'English' },
+  { code: 'eu', label: 'EU', name: 'Euskara', locale: 'eu-ES' },
+  { code: 'es', label: 'ES', name: 'Español', locale: 'es-ES' },
+  { code: 'fr', label: 'FR', name: 'Français', locale: 'fr-FR' },
+  { code: 'en', label: 'EN', name: 'English', locale: 'en-GB' },
+  { code: 'de', label: 'DE', name: 'Deutsch', locale: 'de-DE' },
 ] as const
 
 export type Lang = (typeof languages)[number]['code']
@@ -512,4 +518,4 @@ const en: Copy = {
   photoCredit: 'Photo',
 }
 
-export const copy: Record<Lang, Copy> = { es, eu, en }
+export const copy: Record<Lang, Copy> = { eu, es, fr, en, de }

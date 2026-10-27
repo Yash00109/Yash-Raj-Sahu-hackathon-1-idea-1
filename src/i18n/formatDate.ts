@@ -1,6 +1,6 @@
-import type { Lang } from './copy'
+import { languages, type Lang } from './copy'
 
-const locales: Record<Lang, string> = { es: 'es-ES', eu: 'eu-ES', en: 'en-GB' }
+const locales = Object.fromEntries(languages.map(({ code, locale }) => [code, locale])) as Record<Lang, string>
 
 const longDate: Intl.DateTimeFormatOptions = {
   weekday: 'long',
@@ -8,6 +8,8 @@ const longDate: Intl.DateTimeFormatOptions = {
   month: 'long',
   year: 'numeric',
 }
+
+export const localeFor = (lang: Lang) => locales[lang]
 
 /**
  * Formats a `yyyy-mm-dd` value for the request summary in the selected language.

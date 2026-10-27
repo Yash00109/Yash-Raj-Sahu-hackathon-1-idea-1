@@ -1,12 +1,24 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Link } from 'react-router'
+import {
+  isCalendarDate,
+  LIMITS,
+  validateReservationRequest,
+  venueNow,
+  type FieldError,
+  type PublicField,
+  type Seating,
+  type ValidationCode,
+} from '../../supabase/functions/_shared/reservation.ts'
+import { backendConfig, type ConfigState } from '../config'
 import { venue, venueImages } from '../content/venue'
-import type { Copy, Lang, RequestDetails } from '../i18n/copy'
+import { availability } from '../i18n/availability'
+import { booking } from '../i18n/booking'
+import { languages, type Copy, type Lang, type RequestDetails } from '../i18n/copy'
 import { formatRequestDate } from '../i18n/formatDate'
+import { TRACKER_HREF } from '../routes'
+import { fetchAvailability, submitReservationRequest, type AvailabilityOutcome, type SubmitOutcome } from '../services/reservationService'
 import { VenuePhoto } from './VenuePhoto'
-
-type Seating = 'indoor' | 'terrace'
-
-type RequiredText = 'name' | 'phone'
 
 interface FormState {
   date: string
@@ -18,57 +30,172 @@ interface FormState {
   notes: string
 }
 
-const todayIso = () => {
-  const now = new Date()
-  const offset = now.getTimezoneOffset() * 60_000
-  return new Date(now.getTime() - offset).toISOString().slice(0, 10)
-}
+type Phase = 'editing' | 'submitting' | 'created' | 'prepared'
+type Failure = 'network' | 'server' | 'rateLimited' | 'rejected' | 'slotTaken' | null
+type FormField = Exclude<PublicField, 'requestId'>
+
+/** Field order on screen, used to focus the first invalid field. */
+const FIELD_ORDER: FormField[] = ['date', 'time', 'partySize', 'seating', 'name', 'phone', 'language', 'notes']
+
+const newRequestId = () =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, () => Math.floor(Math.random() * 16).toString(16))
+
+const emptyForm: FormState = { date: '', time: '', guests: '2', seating: 'indoor', name: '', phone: '', notes: '' }
 
 interface ReservationProps {
   t: Copy
   lang: Lang
+  /** Injected in tests; the app uses the build-time configuration and the real service. */
+  config?: ConfigState
+  submit?: typeof submitReservationRequest
+  loadAvailability?: typeof fetchAvailability
 }
 
-export function Reservation({ t, lang }: ReservationProps) {
+/** Availability is only asked for once date and party size are plausible. */
+function availabilityQuery(form: FormState, refresh: number): { key: string; date: string; partySize: number } | null {
+  const guests = form.guests.trim()
+  if (!isCalendarDate(form.date) || !/^\d+$/.test(guests)) return null
+  const partySize = Number(guests)
+  if (partySize < LIMITS.partySizeMin || partySize > LIMITS.partySizeMax) return null
+  return { key: `${form.date}|${partySize}|${refresh}`, date: form.date, partySize }
+}
+
+export function Reservation({ t, lang, config = backendConfig, submit = submitReservationRequest, loadAvailability = fetchAvailability }: ReservationProps) {
   const f = t.reserve.form
+  const b = booking[lang]
+  const a = availability[lang]
+  const online = config.ok
   const ids = useId()
-  const [form, setForm] = useState<FormState>({
-    date: '',
-    time: '',
-    guests: '2',
-    seating: 'indoor',
-    name: '',
-    phone: '',
-    notes: '',
-  })
-  const [submitted, setSubmitted] = useState(false)
-  const [blank, setBlank] = useState<Record<RequiredText, boolean>>({ name: false, phone: false })
-  const summaryHeadingRef = useRef<HTMLHeadingElement>(null)
-  const nameRef = useRef<HTMLInputElement>(null)
-  const phoneRef = useRef<HTMLInputElement>(null)
+  const [form, setForm] = useState<FormState>(emptyForm)
+  const [contactLanguage, setContactLanguage] = useState<Lang | null>(null)
+  const [phase, setPhase] = useState<Phase>('editing')
+  const [errors, setErrors] = useState<Partial<Record<FormField, ValidationCode>>>({})
+  const [failure, setFailure] = useState<Failure>(null)
+  const [reference, setReference] = useState('')
+  const [requestId, setRequestId] = useState(newRequestId)
+  const resultHeadingRef = useRef<HTMLHeadingElement>(null)
+  const alertRef = useRef<HTMLDivElement>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+
+  const [refresh, setRefresh] = useState(0)
+  const [slotResult, setSlotResult] = useState<{ key: string; outcome: AvailabilityOutcome } | null>(null)
+
+  const language = contactLanguage ?? lang
+  const field = (name: string) => `${ids}-${name}`
 
   useEffect(() => {
-    if (submitted) summaryHeadingRef.current?.focus()
-  }, [submitted])
+    if (phase === 'created' || phase === 'prepared') resultHeadingRef.current?.focus()
+  }, [phase])
 
-  const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
-    setForm((current) => ({ ...current, [key]: value }))
+  const query = online ? availabilityQuery(form, refresh) : null
+  const queryKey = query?.key ?? null
+  const queryDate = query?.date ?? null
+  const queryParty = query?.partySize ?? null
+  useEffect(() => {
+    if (queryKey === null || queryDate === null || queryParty === null) return
+    let active = true
+    loadAvailability(queryDate, queryParty, { config }).then((outcome) => {
+      if (active) setSlotResult({ key: queryKey, outcome })
+    })
+    return () => {
+      active = false
+    }
+  }, [queryKey, queryDate, queryParty, config, loadAvailability])
 
-  const updateRequiredText = (key: RequiredText, value: string) => {
-    update(key, value)
-    if (blank[key] && value.trim()) setBlank((current) => ({ ...current, [key]: false }))
+  const slotState: 'idle' | 'loading' | 'error' | 'ready' = !query
+    ? 'idle'
+    : slotResult?.key !== query.key
+      ? 'loading'
+      : slotResult.outcome.kind === 'ok'
+        ? 'ready'
+        : 'error'
+  const openSlots = slotState === 'ready' && slotResult?.outcome.kind === 'ok' ? slotResult.outcome.slots.filter((s) => s.available).map((s) => s.time) : []
+
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    // A new date means a new slot list: never carry a time over from another day.
+    setForm((current) => ({ ...current, [key]: value, ...(key === 'date' && online && value !== current.date ? { time: '' } : {}) }))
+    const errorKey: FormField = key === 'guests' ? 'partySize' : (key as FormField)
+    if (errors[errorKey]) setErrors((current) => ({ ...current, [errorKey]: undefined }))
   }
 
-  // Native `required` accepts whitespace-only values, so blank-after-trim is checked here.
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const nextBlank = { name: !form.name.trim(), phone: !form.phone.trim() }
-    setBlank(nextBlank)
-    if (nextBlank.name || nextBlank.phone) {
-      ;(nextBlank.name ? nameRef : phoneRef).current?.focus()
+  const payload = () => ({
+    name: form.name,
+    phone: form.phone,
+    date: form.date,
+    time: form.time,
+    partySize: /^\d+$/.test(form.guests.trim()) ? Number(form.guests) : Number.NaN,
+    seating: form.seating,
+    language,
+    notes: form.notes,
+    requestId,
+  })
+
+  const showErrors = (list: FieldError[]) => {
+    const next: Partial<Record<FormField, ValidationCode>> = {}
+    for (const error of list) {
+      const key = error.field as FormField
+      if (FIELD_ORDER.includes(key) && !next[key]) next[key] = error.code
+    }
+    setErrors(next)
+    const first = FIELD_ORDER.find((key) => next[key])
+    const target = first && formRef.current?.querySelector<HTMLElement>(`[data-field="${first}"]`)
+    target?.focus()
+  }
+
+  const handleOutcome = (outcome: SubmitOutcome) => {
+    if (outcome.kind === 'created') {
+      setReference(outcome.reference)
+      setRequestId(newRequestId())
+      setPhase('created')
       return
     }
-    setSubmitted(true)
+    setPhase('editing')
+    if (outcome.kind === 'invalid') {
+      setFailure('rejected')
+      showErrors(outcome.errors)
+    } else if (outcome.kind === 'slot_unavailable') {
+      setFailure('slotTaken')
+      setForm((current) => ({ ...current, time: '' }))
+      setRefresh((n) => n + 1)
+    } else if (outcome.kind === 'rate_limited') setFailure('rateLimited')
+    else if (outcome.kind === 'network_error') setFailure('network')
+    else if (outcome.kind === 'unavailable') setPhase('prepared')
+    else setFailure('server')
+    alertRef.current?.focus()
+  }
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (phase === 'submitting') return
+    setFailure(null)
+    const body = payload()
+    const result = validateReservationRequest(body)
+    // Online, the time must be one of the slots the server just offered.
+    const slotError: FieldError[] =
+      online && !openSlots.includes(form.time) && !(result.ok === false && result.errors.some((e) => e.field === 'time'))
+        ? [{ field: 'time', code: form.time ? 'slot_not_offered' : 'time_invalid' }]
+        : []
+    if (!result.ok || slotError.length) {
+      showErrors([...(result.ok ? [] : result.errors), ...slotError])
+      return
+    }
+    setErrors({})
+    if (!online) {
+      setPhase('prepared')
+      return
+    }
+    setPhase('submitting')
+    handleOutcome(await submit(body, { config }))
+  }
+
+  const startAgain = () => {
+    setForm(emptyForm)
+    setErrors({})
+    setFailure(null)
+    setReference('')
+    setPhase('editing')
   }
 
   const details: RequestDetails = {
@@ -76,13 +203,36 @@ export function Reservation({ t, lang }: ReservationProps) {
     time: form.time,
     guests: form.guests,
     seating: form.seating === 'indoor' ? f.indoor : f.terrace,
-    name: form.name.trim(),
+    name: form.name.replace(/\s+/g, ' ').trim(),
     phone: form.phone.trim(),
     notes: form.notes.trim(),
   }
   const whatsappUrl = `${venue.whatsappHref}?text=${encodeURIComponent(t.reserve.whatsappMessage(details))}`
+  const languageName = languages.find((option) => option.code === language)?.name ?? language
 
-  const field = (name: string) => `${ids}-${name}`
+  const describedBy = (name: FormField, hint?: string) =>
+    [hint && field(hint), errors[name] && field(`${name}-error`)].filter(Boolean).join(' ') || undefined
+  const errorText = (name: FormField) =>
+    errors[name] && (
+      <p className="field__error" id={field(`${name}-error`)}>
+        {b.errors[errors[name]!]}
+      </p>
+    )
+  const hasErrors = Object.values(errors).some(Boolean)
+  const alertMessage = failure === 'slotTaken' ? a.slots.taken : failure ? b.failure[failure] : hasErrors ? b.errorSummary : null
+
+  const summaryList = (
+    <dl className="summary__list">
+      <div><dt>{f.date}</dt><dd>{details.date}</dd></div>
+      <div><dt>{f.time}</dt><dd>{details.time}</dd></div>
+      <div><dt>{f.guests}</dt><dd>{details.guests}</dd></div>
+      <div><dt>{f.seating}</dt><dd>{details.seating}</dd></div>
+      <div><dt>{b.language}</dt><dd>{languageName}</dd></div>
+      <div><dt>{f.name}</dt><dd>{details.name}</dd></div>
+      <div><dt>{f.phone}</dt><dd>{details.phone}</dd></div>
+      {details.notes && <div><dt>{f.notes}</dt><dd>{details.notes}</dd></div>}
+    </dl>
+  )
 
   return (
     <section className="reserve section" id="reservar" aria-labelledby="reserve-title">
@@ -131,84 +281,169 @@ export function Reservation({ t, lang }: ReservationProps) {
             <div className="seat-photo seat-photo--terrace" aria-hidden={form.seating !== 'terrace'}>
               <VenuePhoto image={venueImages.terrace} alt={f.terraceAlt} fallbackLabel={t.imageUnavailable} sizes="(max-width: 900px) 100vw, 40vw" objectPosition="50% 40%" />
             </div>
-            <span className="badge badge--prototype">{t.reserve.prototypeBadge}</span>
+            {!online && <span className="badge badge--prototype">{b.unavailable.badge}</span>}
           </div>
 
           <div className="request-card__body">
             <p className="prototype-note" id={field('note')}>
-              {t.reserve.prototypeNotice}
+              {online ? b.onlineNotice : b.unavailable.body}
             </p>
+            {online && (
+              <p className="tracker-link">
+                <Link to={TRACKER_HREF}>{a.tracker.link}</Link>
+              </p>
+            )}
 
-            {submitted ? (
+            {phase === 'created' ? (
+              <div className="summary summary--success" role="status">
+                <h3 className="summary__title" ref={resultHeadingRef} tabIndex={-1}>
+                  {b.success.title}
+                </h3>
+                <p className="summary__reference">
+                  {b.success.reference}: <strong>{reference}</strong>
+                </p>
+                {summaryList}
+                <p className="summary__body">{b.success.body}</p>
+                <div className="summary__actions">
+                  <a className="btn btn--ghost-dark" href={venue.phoneHref}>
+                    {t.reserve.call} {venue.phoneDisplay}
+                  </a>
+                  <button type="button" className="btn btn--dark" onClick={startAgain}>
+                    {b.success.another}
+                  </button>
+                </div>
+              </div>
+            ) : phase === 'prepared' ? (
               <div className="summary" role="status">
-                <h3 className="summary__title" ref={summaryHeadingRef} tabIndex={-1}>
+                <h3 className="summary__title" ref={resultHeadingRef} tabIndex={-1}>
                   {t.reserve.summary.title}
                 </h3>
-                <dl className="summary__list">
-                  <div><dt>{f.date}</dt><dd>{details.date}</dd></div>
-                  <div><dt>{f.time}</dt><dd>{details.time}</dd></div>
-                  <div><dt>{f.guests}</dt><dd>{details.guests}</dd></div>
-                  <div><dt>{f.seating}</dt><dd>{details.seating}</dd></div>
-                  <div><dt>{f.name}</dt><dd>{details.name}</dd></div>
-                  <div><dt>{f.phone}</dt><dd>{details.phone}</dd></div>
-                  {details.notes && <div><dt>{f.notes}</dt><dd>{details.notes}</dd></div>}
-                </dl>
+                {summaryList}
                 <p className="summary__body">{t.reserve.summary.body}</p>
                 <div className="summary__actions">
                   <a className="btn btn--primary" href={whatsappUrl} target="_blank" rel="noreferrer">
                     {t.reserve.summary.whatsapp}
                     <span className="btn__arrow" aria-hidden="true">↗</span>
                   </a>
-                  <button type="button" className="btn btn--ghost-dark" onClick={() => setSubmitted(false)}>
+                  <button type="button" className="btn btn--ghost-dark" onClick={() => setPhase('editing')}>
                     {t.reserve.summary.edit}
                   </button>
                 </div>
               </div>
             ) : (
-              <form className="request-form" onSubmit={onSubmit} aria-describedby={field('note')}>
+              <form
+                ref={formRef}
+                className="request-form"
+                onSubmit={onSubmit}
+                noValidate
+                aria-describedby={field('note')}
+                aria-busy={phase === 'submitting'}
+              >
                 <h3 className="request-form__legend">{f.legend}</h3>
+
+                <div className="form-alert" role="alert" ref={alertRef} tabIndex={-1} hidden={!alertMessage}>
+                  {alertMessage && (
+                    <>
+                      <p>{alertMessage}</p>
+                      {failure && failure !== 'rejected' && failure !== 'slotTaken' && <p className="form-alert__fallback">{b.failure.fallback}</p>}
+                    </>
+                  )}
+                </div>
 
                 <div className="field">
                   <label htmlFor={field('date')}>{f.date}</label>
                   <input
                     id={field('date')}
+                    data-field="date"
                     type="date"
-                    required
-                    min={todayIso()}
+                    aria-required="true"
+                    min={venueNow().date}
                     value={form.date}
-                    aria-describedby={field('date-hint')}
+                    aria-invalid={Boolean(errors.date) || undefined}
+                    aria-describedby={describedBy('date', 'date-hint')}
                     onChange={(e) => update('date', e.target.value)}
                   />
                   <p className="field__hint" id={field('date-hint')}>{f.dateHint}</p>
+                  {errorText('date')}
                 </div>
 
-                <div className="field">
-                  <label htmlFor={field('time')}>{f.time}</label>
-                  <input
-                    id={field('time')}
-                    type="time"
-                    required
-                    value={form.time}
-                    aria-describedby={field('time-hint')}
-                    onChange={(e) => update('time', e.target.value)}
-                  />
-                  <p className="field__hint" id={field('time-hint')}>{f.timeHint}</p>
-                </div>
+                {online ? (
+                  <fieldset
+                    className="field field--full slots"
+                    data-field="time"
+                    tabIndex={-1}
+                    aria-invalid={Boolean(errors.time) || undefined}
+                    aria-describedby={describedBy('time', 'slots-hint')}
+                  >
+                    <legend>{a.slots.legend}</legend>
+                    <p className="slots__status" role="status" aria-live="polite">
+                      {slotState === 'idle'
+                        ? a.slots.idle
+                        : slotState === 'loading'
+                          ? a.slots.loading
+                          : slotState === 'error'
+                            ? a.slots.error
+                            : openSlots.length === 0
+                              ? a.slots.none
+                              : ''}
+                    </p>
+                    {openSlots.length > 0 && (
+                      <div className="slots__options">
+                        {openSlots.map((slot) => (
+                          <label className="slot" key={slot}>
+                            <input type="radio" name="time" value={slot} checked={form.time === slot} onChange={() => update('time', slot)} />
+                            <span>{slot}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                    {slotState === 'error' && (
+                      <button type="button" className="btn btn--ghost-dark btn--compact" onClick={() => setRefresh((n) => n + 1)}>
+                        {a.slots.retry}
+                      </button>
+                    )}
+                    <p className="field__hint" id={field('slots-hint')}>{a.slots.hint}</p>
+                    {errorText('time')}
+                  </fieldset>
+                ) : (
+                  <div className="field">
+                    <label htmlFor={field('time')}>{f.time}</label>
+                    <input
+                      id={field('time')}
+                      data-field="time"
+                      type="time"
+                      aria-required="true"
+                      value={form.time}
+                      aria-invalid={Boolean(errors.time) || undefined}
+                      aria-describedby={describedBy('time', 'time-hint')}
+                      onChange={(e) => update('time', e.target.value)}
+                    />
+                    <p className="field__hint" id={field('time-hint')}>{f.timeHint}</p>
+                    {errorText('time')}
+                  </div>
+                )}
 
                 <div className="field">
                   <label htmlFor={field('guests')}>{f.guests}</label>
                   <input
                     id={field('guests')}
+                    data-field="partySize"
                     type="number"
                     inputMode="numeric"
-                    required
-                    min={1}
+                    aria-required="true"
+                    min={LIMITS.partySizeMin}
+                    max={LIMITS.partySizeMax}
+                    step={1}
                     value={form.guests}
+                    aria-invalid={Boolean(errors.partySize) || undefined}
+                    aria-describedby={describedBy('partySize', 'guests-hint')}
                     onChange={(e) => update('guests', e.target.value)}
                   />
+                  <p className="field__hint" id={field('guests-hint')}>{b.guestsHint}</p>
+                  {errorText('partySize')}
                 </div>
 
-                <fieldset className="field seating" aria-describedby={field('seating-hint')}>
+                <fieldset className="field seating" aria-describedby={describedBy('seating', 'seating-hint')}>
                   <legend>{f.seating}</legend>
                   <div className="seating__options">
                     {(['indoor', 'terrace'] as const).map((option) => (
@@ -217,6 +452,7 @@ export function Reservation({ t, lang }: ReservationProps) {
                           type="radio"
                           name="seating"
                           value={option}
+                          data-field={option === 'indoor' ? 'seating' : undefined}
                           checked={form.seating === option}
                           onChange={() => update('seating', option)}
                         />
@@ -225,60 +461,83 @@ export function Reservation({ t, lang }: ReservationProps) {
                     ))}
                   </div>
                   <p className="field__hint" id={field('seating-hint')}>{f.seatingHint}</p>
+                  {errorText('seating')}
                 </fieldset>
 
                 <div className="field">
                   <label htmlFor={field('name')}>{f.name}</label>
                   <input
-                    ref={nameRef}
                     id={field('name')}
+                    data-field="name"
                     type="text"
                     autoComplete="name"
-                    required
+                    aria-required="true"
+                    maxLength={LIMITS.nameMax + 20}
                     value={form.name}
-                    aria-invalid={blank.name || undefined}
-                    aria-describedby={blank.name ? field('name-error') : undefined}
-                    onChange={(e) => updateRequiredText('name', e.target.value)}
+                    aria-invalid={Boolean(errors.name) || undefined}
+                    aria-describedby={describedBy('name')}
+                    onChange={(e) => update('name', e.target.value)}
                   />
-                  {blank.name && (
-                    <p className="field__error" id={field('name-error')} role="alert">
-                      {f.nameRequired}
-                    </p>
-                  )}
+                  {errorText('name')}
                 </div>
 
                 <div className="field">
                   <label htmlFor={field('phone')}>{f.phone}</label>
                   <input
-                    ref={phoneRef}
                     id={field('phone')}
+                    data-field="phone"
                     type="tel"
                     autoComplete="tel"
-                    required
+                    aria-required="true"
+                    maxLength={LIMITS.phoneCharsMax}
                     value={form.phone}
-                    aria-invalid={blank.phone || undefined}
-                    aria-describedby={blank.phone ? field('phone-error') : undefined}
-                    onChange={(e) => updateRequiredText('phone', e.target.value)}
+                    aria-invalid={Boolean(errors.phone) || undefined}
+                    aria-describedby={describedBy('phone')}
+                    onChange={(e) => update('phone', e.target.value)}
                   />
-                  {blank.phone && (
-                    <p className="field__error" id={field('phone-error')} role="alert">
-                      {f.phoneRequired}
-                    </p>
-                  )}
+                  {errorText('phone')}
+                </div>
+
+                <div className="field">
+                  <label htmlFor={field('language')}>{b.language}</label>
+                  <select
+                    id={field('language')}
+                    data-field="language"
+                    value={language}
+                    aria-invalid={Boolean(errors.language) || undefined}
+                    aria-describedby={describedBy('language', 'language-hint')}
+                    onChange={(e) => {
+                      const next = languages.find((option) => option.code === e.target.value)
+                      if (next) setContactLanguage(next.code)
+                    }}
+                  >
+                    {languages.map((option) => (
+                      <option key={option.code} value={option.code} lang={option.code}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="field__hint" id={field('language-hint')}>{b.languageHint}</p>
+                  {errorText('language')}
                 </div>
 
                 <div className="field field--full">
                   <label htmlFor={field('notes')}>{f.notes}</label>
                   <textarea
                     id={field('notes')}
+                    data-field="notes"
                     rows={3}
+                    maxLength={LIMITS.notesMax + 50}
                     value={form.notes}
+                    aria-invalid={Boolean(errors.notes) || undefined}
+                    aria-describedby={describedBy('notes')}
                     onChange={(e) => update('notes', e.target.value)}
                   />
+                  {errorText('notes')}
                 </div>
 
-                <button type="submit" className="btn btn--dark btn--block">
-                  {f.submit}
+                <button type="submit" className="btn btn--dark btn--block" disabled={phase === 'submitting'}>
+                  {phase === 'submitting' ? b.submitting : online ? b.submit : f.submit}
                 </button>
               </form>
             )}

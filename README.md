@@ -1,32 +1,27 @@
-# React + TypeScript + Vite
+# Sidrería Iturrieta
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Website for Iturrieta, a cider house in Aramaio (Álava): a five-language public site
+(Euskara, Español, Français, English, Deutsch) with online reservation requests and a
+staff dashboard for confirming them.
 
-Currently, two official plugins are available:
+- Public site: React 19 + TypeScript + Vite, deployed as a static SPA (Vercel).
+- Reservations: a Supabase Edge Function stores requests as *pending*; staff confirm,
+  reject or cancel them at `/staff`. Nothing is confirmed automatically.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```powershell
+npm ci
+npm run dev        # http://localhost:5180
+npm test           # unit/component tests
+npm run lint
+npm run build
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+| Document | Contents |
+|---|---|
+| [docs/SETUP.md](docs/SETUP.md) | Local development, including the local Supabase stack and integration tests |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, trust boundaries and design decisions |
+| [docs/DATABASE.md](docs/DATABASE.md) | Hosted schema findings, draft migration, verification |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Secrets, deployment order, smoke test, recovery |
+
+Venue facts, menus and photos come from the official site (iturrieta.eus) and are credited
+on each page.

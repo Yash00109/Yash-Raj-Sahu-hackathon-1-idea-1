@@ -1,8 +1,11 @@
+import { Link } from 'react-router'
 import { venue, venueImages } from '../content/venue'
 import type { Copy } from '../i18n/copy'
+import type { SiteCopy } from '../i18n/site'
+import { pathFor } from '../routes'
 import { VenuePhoto } from './VenuePhoto'
 
-export function Story({ t }: { t: Copy }) {
+export function Story({ t, s }: { t: Copy; s: SiteCopy }) {
   return (
     <section className="story section" id="historia" aria-labelledby="story-title">
       <div className="container story__grid">
@@ -27,6 +30,10 @@ export function Story({ t }: { t: Copy }) {
           <blockquote className="story__motto reveal">
             <p>{t.story.motto}</p>
           </blockquote>
+          <Link className="btn btn--ghost-dark story__link reveal" to={pathFor('about')}>
+            {s.pages.about}
+            <span className="btn__arrow" aria-hidden="true">→</span>
+          </Link>
           <p className="story__year reveal" aria-hidden="true">
             {venue.founded}
           </p>

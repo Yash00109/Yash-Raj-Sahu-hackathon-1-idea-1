@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+      - name: Bundle contains no secret keys
+        run: |
+          if grep -rEl 'sb_secret_[A-Za-z0-9]|eyJ[A-Za-z0-9_-]{20,}\.' dist; then
+            echo "A secret-looking key was found in dist/" >&2
+            exit 1
+          fi

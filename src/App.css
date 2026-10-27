@@ -313,13 +313,18 @@
 
 .site-nav__list {
   display: flex;
-  gap: clamp(20px, 2.6vw, 40px);
+  gap: clamp(14px, 1.5vw, 28px);
+}
+
+.site-nav__item--home {
+  display: none;
 }
 
 .site-nav__link {
   position: relative;
   padding-block: 6px;
-  font-size: 0.92rem;
+  font-size: 0.88rem;
+  white-space: nowrap;
   color: var(--on-dark-muted);
   text-decoration: none;
   transition: color 200ms;
@@ -340,8 +345,13 @@
   color: var(--on-dark);
 }
 
-.site-nav__link:hover::after {
+.site-nav__link:hover::after,
+.site-nav__link.is-active::after {
   transform: scaleX(1);
+}
+
+.site-nav__link.is-active {
+  color: var(--on-dark);
 }
 
 .site-header__actions {
@@ -351,35 +361,32 @@
   flex: none;
 }
 
-.lang-switch {
-  display: flex;
-  padding: 3px;
+.lang-select {
+  display: block;
+}
+
+.lang-select__control {
+  min-height: 38px;
+  padding: 0 30px 0 12px;
   border: 1px solid var(--line-dark);
   border-radius: 2px;
-}
-
-.lang-switch__btn {
-  min-width: 38px;
-  min-height: 32px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 1px;
-  background: none;
-  color: var(--on-dark-muted);
-  font-size: 0.74rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  transition: background-color 200ms, color 200ms;
-}
-
-.lang-switch__btn:hover {
+  appearance: none;
+  background: transparent url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23c9bead' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center;
   color: var(--on-dark);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color 200ms;
 }
 
-.lang-switch__btn[aria-pressed='true'] {
-  background: var(--on-dark);
-  color: var(--charcoal);
+.lang-select__control:hover {
+  border-color: rgb(243 236 223 / 0.45);
+}
+
+.lang-select__control option {
+  background: var(--charcoal);
+  color: var(--on-dark);
 }
 
 .menu-toggle {
@@ -421,8 +428,13 @@
   transform: translateY(-8px) rotate(-90deg);
 }
 
-@media (max-width: 1023px) {
+/* Six page links plus brand, language switch and CTA only fit inline from 1280px. */
+@media (max-width: 1279px) {
   .menu-toggle {
+    display: block;
+  }
+
+  .site-nav__item--home {
     display: block;
   }
 
@@ -434,6 +446,8 @@
     position: absolute;
     inset: 100% 0 auto;
     margin: 0;
+    max-height: calc(100svh - var(--header-h));
+    overflow-y: auto;
     padding: 12px var(--gutter) 32px;
     background: rgb(26 24 21 / 0.97);
     border-bottom: 1px solid var(--line-dark);
@@ -460,11 +474,15 @@
 
   .site-nav__link {
     display: block;
-    padding-block: 14px;
+    padding-block: 12px;
     border-bottom: 1px solid var(--line-dark);
     font-family: var(--font-display);
-    font-size: 1.6rem;
+    font-size: 1.45rem;
     color: var(--on-dark);
+  }
+
+  .site-nav__link.is-active {
+    color: var(--amber-bright);
   }
 
   .site-nav__link::after {
@@ -487,11 +505,6 @@
 
   .site-header__actions {
     gap: 8px;
-  }
-
-  .lang-switch__btn {
-    min-width: 32px;
-    padding: 0 4px;
   }
 
   .btn--compact {
@@ -517,14 +530,10 @@
     gap: 6px;
   }
 
-  .lang-switch {
-    padding: 2px;
-  }
-
-  .lang-switch__btn {
-    min-width: 28px;
-    padding: 0 2px;
-    letter-spacing: 0.06em;
+  .lang-select__control {
+    padding: 0 22px 0 8px;
+    background-position: right 7px center;
+    font-size: 0.74rem;
   }
 
   .btn--compact {
@@ -539,8 +548,9 @@
   position: relative;
   display: grid;
   grid-template-rows: 1fr auto;
+  /* A minimum, never a fixed height: when the content needs more room the hero grows and the page scrolls. */
   min-height: 100svh;
-  padding-top: calc(var(--header-h) + clamp(24px, 5vh, 64px));
+  padding-top: calc(var(--header-h) + clamp(12px, 5svh, 64px));
   background: var(--charcoal);
   color: var(--on-dark);
   overflow: clip;
@@ -576,21 +586,24 @@
   max-width: calc(var(--max) + var(--gutter) * 2);
   margin-inline: auto;
   padding-inline: var(--gutter);
-  padding-bottom: clamp(40px, 6vh, 80px);
+  padding-bottom: clamp(24px, 6svh, 80px);
 }
 
 .hero__copy {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
 .hero__title {
-  margin-top: clamp(20px, 3vh, 32px);
+  margin-top: clamp(12px, 3svh, 32px);
   font-family: var(--font-display);
   font-weight: 500;
   font-optical-sizing: auto;
-  font-size: clamp(3rem, 1.4rem + 5.4vw, 7.2rem);
+  /* Scales with the smaller of width and height, so a short window gets a shorter heading
+     (on tall screens the width term wins, as before). */
+  font-size: clamp(2.4rem, min(1.4rem + 5.4vw, 1rem + 9.5svh), 7.2rem);
   line-height: 0.94;
   letter-spacing: -0.025em;
   text-wrap: balance;
@@ -607,7 +620,7 @@
 
 .hero__lede {
   max-width: 32rem;
-  margin-top: clamp(20px, 3vh, 32px);
+  margin-top: clamp(12px, 3svh, 32px);
   font-size: clamp(1.04rem, 0.98rem + 0.3vw, 1.22rem);
   line-height: 1.6;
   color: var(--on-dark-muted);
@@ -617,7 +630,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px 16px;
-  margin-top: clamp(28px, 4vh, 44px);
+  margin-top: clamp(16px, 4svh, 44px);
 }
 
 .hero__enter {
@@ -642,7 +655,7 @@
 }
 
 .hero__fact {
-  padding: 20px 24px 28px 0;
+  padding: clamp(12px, 2.4svh, 20px) 24px clamp(14px, 3.2svh, 28px) 0;
   border-top: 1px solid var(--line-dark);
 }
 
@@ -672,8 +685,10 @@
   --py: 0;
   position: relative;
   justify-self: end;
-  width: min(100%, calc((100svh - var(--header-h) - 150px) * 1.05));
-  min-width: min(100%, 420px);
+  /* Sized by the available height as well as the column width, so the photographs shrink
+     with a short window instead of running below it (no fixed minimum overrides this). */
+  width: min(100%, calc((100svh - var(--header-h) - 120px) * 1.02));
+  min-width: min(100%, 280px);
   aspect-ratio: 1 / 0.98;
   transform: perspective(1600px) rotateY(calc(var(--px) * 3deg)) rotateX(calc(var(--py) * -2.4deg));
   transition: transform 1000ms var(--ease-out);
@@ -826,13 +841,21 @@
     gap: 48px;
   }
 
+  .hero__inner {
+    gap: clamp(24px, 5svh, 48px);
+  }
+
   .stage {
     order: -1;
     justify-self: center;
-    width: 100%;
+    /* Never taller than about half the window, whatever the width. */
+    width: min(100%, 560px, calc(52svh / 0.86));
     min-width: 0;
-    max-width: 560px;
     aspect-ratio: 1 / 0.86;
+  }
+
+  .stage__rings {
+    left: 0;
   }
 
   .stage__frame--back {
@@ -852,6 +875,14 @@
 
   .stage__frame--back .stage__caption {
     left: 50%;
+  }
+}
+
+/* Short stacked screens (small tablets, phones in landscape, short windows): lead with the
+   heading and the booking button, and show the photographs after them. */
+@media (max-width: 900px) and (max-height: 760px) {
+  .stage {
+    order: 0;
   }
 }
 
@@ -1411,8 +1442,14 @@
 
 .site-footer__grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.3fr) repeat(3, minmax(0, 1fr));
   gap: 48px;
+}
+
+@media (max-width: 1100px) {
+  .site-footer__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .site-footer__brand img {

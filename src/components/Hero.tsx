@@ -1,6 +1,8 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
+import { Link } from 'react-router'
 import { venueImages } from '../content/venue'
 import type { Copy } from '../i18n/copy'
+import { RESERVATION_HREF } from '../routes'
 import { VenuePhoto } from './VenuePhoto'
 
 const step = (index: number) => ({ '--i': index }) as CSSProperties
@@ -84,10 +86,10 @@ export function Hero({ t, interactive, animateEntrance }: HeroProps) {
             {t.hero.lede}
           </p>
           <div className={`hero__ctas${enterClass}`} style={enterStyle(4)}>
-            <a className="btn btn--primary btn--large" href="#reservar">
+            <Link className="btn btn--primary btn--large" to={RESERVATION_HREF}>
               {t.hero.primaryCta}
               <span className="btn__arrow" aria-hidden="true">→</span>
-            </a>
+            </Link>
             <a className="btn btn--ghost-light" href="#historia">
               {t.hero.secondaryCta}
             </a>
