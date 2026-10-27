@@ -12,6 +12,20 @@ dist
 dist-ssr
 *.local
 
+# Environment files and secrets (at any depth); .env.example stays trackable
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+service-account*.json
+
+# Supabase CLI local state (project ref, connection details, branch data)
+supabase/.temp/
+supabase/.branches/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
